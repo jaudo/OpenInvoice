@@ -1,0 +1,19 @@
+# Core dependencies
+pywebview>=5.0
+pydantic>=2.0
+
+# QR Code
+qrcode[pil]>=7.4
+Pillow>=10.0
+
+# Thermal Printer (ESC/POS)
+python-escpos>=3.1
+
+# PDF Generation
+reportlab>=4.0
+
+# Build
+pyinstaller>=6.0
+
+# Development
+pytest>=7.0
