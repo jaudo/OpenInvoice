@@ -8,6 +8,7 @@ Pillow>=10.0
 
 # Thermal Printer (ESC/POS)
 python-escpos>=3.1
+pyusb>=1.2.1  # USB device discovery (requires libusb driver on Windows)
 
 # PDF Generation
 reportlab>=4.0

@@ -4,7 +4,7 @@ from typing import Optional
 from dataclasses import dataclass, asdict
 import json
 
-from ..connection import Database
+from database.connection import Database
 
 
 @dataclass

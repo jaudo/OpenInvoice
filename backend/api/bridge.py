@@ -1,23 +1,27 @@
 """API bridge for pywebview - exposes backend functionality to frontend."""
 
+import subprocess
+import sys
+import os
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
-from ..database.connection import Database
-from ..database.migrations import initialize_database
-from ..database.repositories.products import ProductRepository, Product
-from ..database.repositories.invoices import InvoiceRepository, Invoice, InvoiceItem
-from ..database.repositories.settings import SettingsRepository
-from ..database.repositories.audit import AuditRepository
-from ..core.hash_chain import HashChain
-from ..core.qr_generator import QRGenerator
-from ..core.qr_validator import QRValidator
-from ..core.keyboard_mapper import KeyboardMapper
-from ..services.printer import ThermalPrinter, PrinterNotConnectedError
-from ..services.pdf_generator import PDFGenerator
-from ..services.email_service import EmailService, EmailConfig
-from ..services.csv_importer import CSVImporter
-from ..services.reports import ReportsService
+from database.connection import Database
+from database.migrations import initialize_database
+from database.repositories.products import ProductRepository, Product
+from database.repositories.invoices import InvoiceRepository, Invoice, InvoiceItem
+from database.repositories.settings import SettingsRepository
+from database.repositories.audit import AuditRepository
+from core.hash_chain import HashChain
+from core.qr_generator import QRGenerator
+from core.qr_validator import QRValidator
+from core.keyboard_mapper import KeyboardMapper
+from services.printer import ThermalPrinter, PrinterNotConnectedError
+from services.pdf_generator import PDFGenerator
+from services.email_service import EmailService, EmailConfig
+from services.csv_importer import CSVImporter
+from services.reports import ReportsService
 
 
 class API:
@@ -38,18 +42,41 @@ class API:
         self.settings = SettingsRepository(self.db)
         self.audit = AuditRepository(self.db)
 
+        # Set up PDF output directory in user data folder
+        pdf_output_dir = self._get_pdf_output_dir()
+
         # Services
         self.qr_generator = QRGenerator()
         self.qr_validator = QRValidator(self.invoices)
         self.printer = ThermalPrinter()
-        self.pdf_generator = PDFGenerator()
+        self.pdf_generator = PDFGenerator(output_dir=pdf_output_dir)
         self.email_service = EmailService()
         self.csv_importer = CSVImporter(self.products)
         self.reports = ReportsService(self.db)
 
+    def _get_pdf_output_dir(self) -> Path:
+        """Get the directory for storing PDF receipts."""
+        if sys.platform == 'win32':
+            base = Path(os.environ.get('APPDATA', Path.home()))
+        elif sys.platform == 'darwin':
+            base = Path.home() / 'Library' / 'Application Support'
+        else:
+            base = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share'))
+
+        pdf_dir = base / 'OpenInvoice' / 'receipts'
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+        return pdf_dir
+
     def _response(self, success: bool, data: Any = None, error: str = None) -> dict:
         """Create standardized API response."""
         return {'success': success, 'data': data, 'error': error}
+
+    def get_receipts_directory(self) -> dict:
+        """Get the directory where PDF receipts are saved."""
+        try:
+            return self._response(True, {'path': str(self.pdf_generator.output_dir)})
+        except Exception as e:
+            return self._response(False, error=str(e))
 
     # ============ Products ============
 
@@ -70,11 +97,22 @@ class API:
             return self._response(False, error=str(e))
 
     def products_get_by_barcode(self, barcode: str) -> dict:
-        """Get product by barcode."""
+        """Get product by barcode (auto-fixes keyboard layout issues)."""
         try:
-            product = self.products.get_by_barcode(barcode)
+            # Auto-fix keyboard layout issues (Spanish keyboard, etc.)
+            fixed_barcode = KeyboardMapper.auto_fix(barcode)
+
+            # Try with fixed barcode first
+            product = self.products.get_by_barcode(fixed_barcode)
             if product:
                 return self._response(True, product.to_dict())
+
+            # If not found and barcode was modified, try original
+            if fixed_barcode != barcode:
+                product = self.products.get_by_barcode(barcode)
+                if product:
+                    return self._response(True, product.to_dict())
+
             return self._response(False, error="Product not found")
         except Exception as e:
             return self._response(False, error=str(e))
@@ -233,10 +271,32 @@ class API:
             # Log creation
             self.audit.log_invoice_created(invoice_number, total)
 
+            # Generate and save PDF automatically
+            pdf_path = None
+            try:
+                pdf_path = self.pdf_generator.save_receipt_pdf(
+                    invoice_number=invoice_number,
+                    store_name=store_name,
+                    seller_id=seller_id,
+                    items=[item.to_dict() for item in invoice_items],
+                    subtotal=round(subtotal, 2),
+                    vat_amount=round(vat_total, 2),
+                    total=round(total, 2),
+                    payment_method=payment_method,
+                    qr_base64=qr_image,
+                    currency_symbol=currency_symbol,
+                    timestamp=timestamp,
+                    customer_email=customer_email
+                )
+            except Exception:
+                pass  # Don't fail invoice creation if PDF fails
+
             # Add QR image to response
             response_data = created.to_dict()
             response_data['qr_image'] = qr_image
             response_data['currency_symbol'] = currency_symbol
+            if pdf_path:
+                response_data['pdf_path'] = str(pdf_path)
 
             return self._response(True, response_data)
 
@@ -308,9 +368,12 @@ class API:
     # ============ Validation ============
 
     def qr_validate(self, qr_data: str) -> dict:
-        """Validate a QR code."""
+        """Validate a QR code (auto-fixes keyboard layout issues)."""
         try:
-            result = self.qr_validator.validate(qr_data)
+            # Auto-fix keyboard layout issues (Spanish keyboard, etc.)
+            fixed_qr_data = KeyboardMapper.auto_fix(qr_data)
+
+            result = self.qr_validator.validate(fixed_qr_data)
             return self._response(result.valid, result.to_dict(), result.error_message)
         except Exception as e:
             return self._response(False, error=str(e))
@@ -510,6 +573,77 @@ class API:
         except Exception as e:
             return self._response(False, error=str(e))
 
+    def convert_barcode_input(self, text: str, system_layout: str = 'qwerty_es') -> dict:
+        """
+        Convert barcode scanner input from system keyboard layout to US.
+
+        Use this when your scanner sends US scancodes but Windows interprets
+        them using a different keyboard layout (e.g., Spanish).
+
+        Args:
+            text: The scanned text with wrong characters
+            system_layout: The keyboard layout Windows is using ('qwerty_es', 'azerty', etc.)
+
+        Returns:
+            Corrected text
+        """
+        try:
+            mapper = KeyboardMapper(scanner_layout='qwerty_us', system_layout=system_layout)
+            corrected = mapper.convert_input(text)
+            return self._response(True, {
+                'original': text,
+                'corrected': corrected
+            })
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def auto_fix_barcode(self, text: str) -> dict:
+        """
+        Automatically detect and fix keyboard layout issues in barcode/URL input.
+
+        Example:
+            Input:  "httpsÑ--www.blurams.com-app-1540795774407"
+            Output: "https://www.blurams.com/app/1540795774407"
+
+        Args:
+            text: The scanned text that may have wrong characters
+
+        Returns:
+            Fixed text and detected layout
+        """
+        try:
+            detected = KeyboardMapper.detect_layout_issue(text)
+            corrected = KeyboardMapper.auto_fix(text)
+            return self._response(True, {
+                'original': text,
+                'corrected': corrected,
+                'detected_layout': detected,
+                'was_fixed': text != corrected
+            })
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def fix_spanish_barcode(self, text: str) -> dict:
+        """
+        Quick fix for Spanish keyboard layout barcode issues.
+
+        Use when scanner is US layout but Windows keyboard is Spanish.
+
+        Args:
+            text: Barcode text with wrong characters
+
+        Returns:
+            Corrected text
+        """
+        try:
+            corrected = KeyboardMapper.fix_spanish_barcode(text)
+            return self._response(True, {
+                'original': text,
+                'corrected': corrected
+            })
+        except Exception as e:
+            return self._response(False, error=str(e))
+
     # ============ Printer ============
 
     def printer_status(self) -> dict:
@@ -519,6 +653,8 @@ class API:
             return self._response(True, {
                 'connected': status.connected,
                 'printer_name': status.printer_name,
+                'vendor_id': f"0x{status.vendor_id:04X}" if status.vendor_id else None,
+                'product_id': f"0x{status.product_id:04X}" if status.product_id else None,
                 'error': status.error_message
             })
         except Exception as e:
@@ -531,6 +667,96 @@ class API:
             return self._response(True)
         except PrinterNotConnectedError as e:
             return self._response(False, error=str(e))
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_discover_devices(self) -> dict:
+        """Discover USB devices that might be printers."""
+        try:
+            from services.printer import ThermalPrinter
+            devices = ThermalPrinter.discover_usb_devices()
+            return self._response(True, [d.to_dict() for d in devices])
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_list_all_usb(self) -> dict:
+        """List all USB devices (for troubleshooting)."""
+        try:
+            from services.printer import ThermalPrinter
+            devices = ThermalPrinter.list_all_usb_devices()
+            return self._response(True, [d.to_dict() for d in devices])
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_set_device(self, vendor_id: int, product_id: int) -> dict:
+        """Set specific printer by vendor/product ID."""
+        try:
+            success = self.printer.set_printer(vendor_id, product_id)
+            if success:
+                return self._response(True, {'message': 'Printer connected'})
+            return self._response(False, error='Failed to connect to printer')
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_reconnect(self) -> dict:
+        """Attempt to reconnect to printer."""
+        try:
+            success = self.printer.reconnect()
+            if success:
+                return self._response(True, {'message': 'Printer reconnected'})
+            return self._response(False, error='Failed to reconnect')
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_test_connection(self) -> dict:
+        """Test if printer can actually communicate."""
+        try:
+            success, message = self.printer.test_connection()
+            return self._response(success, {'message': message}, error=None if success else message)
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_set_usb_port(self, port_name: str) -> dict:
+        """
+        Set printer to use a specific USB port directly.
+
+        This bypasses the Windows spooler and sends raw ESC/POS commands
+        directly to the USB port (e.g., 'USB001').
+        """
+        try:
+            from services.printer import WindowsRawPrinter
+            self.printer.windows_printer = WindowsRawPrinter(usb_port=port_name)
+            if self.printer.windows_printer.is_available():
+                self.printer._printer_type = 'windows'
+                self.printer.printer = None
+                return self._response(True, {
+                    'message': f'Printer set to USB port {port_name}',
+                    'port': port_name
+                })
+            return self._response(False, error=f'USB port {port_name} not available')
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def printer_list_ports(self) -> dict:
+        """List available USB printer ports on Windows."""
+        try:
+            ports = []
+            # Check for USB001-USB009
+            for i in range(1, 10):
+                port = f"USB{i:03d}"
+                try:
+                    result = subprocess.run(
+                        ['powershell', '-NoProfile', '-Command',
+                         f"Get-PrinterPort -Name '{port}' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0 and port in result.stdout:
+                        ports.append(port)
+                except:
+                    pass
+            return self._response(True, ports)
         except Exception as e:
             return self._response(False, error=str(e))
 

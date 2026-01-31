@@ -182,7 +182,7 @@ class CSVImporter:
             if existing:
                 if update_existing:
                     # Update existing product
-                    from ..database.repositories.products import Product
+                    from database.repositories.products import Product
                     product = Product(
                         id=existing.id,
                         name=product_data['name'],
@@ -206,7 +206,7 @@ class CSVImporter:
                     result.skipped += 1
             else:
                 # Create new product
-                from ..database.repositories.products import Product
+                from database.repositories.products import Product
 
                 product_id = product_data.get('id') or self._generate_id()
 

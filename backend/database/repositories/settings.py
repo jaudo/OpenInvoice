@@ -3,7 +3,7 @@
 from typing import Optional, Any
 import json
 
-from ..connection import Database
+from database.connection import Database
 
 
 class SettingsRepository:

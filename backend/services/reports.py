@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
-from ..database.connection import Database
+from database.connection import Database
 
 
 @dataclass
