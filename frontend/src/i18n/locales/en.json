@@ -14,13 +14,15 @@
     "back": "Back",
     "next": "Next",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "refresh": "Refresh"
   },
   "nav": {
     "invoice": "Invoice",
     "scan": "Scan",
     "products": "Products",
     "reports": "Reports",
+    "database": "Database",
     "config": "Settings"
   },
   "invoice": {
@@ -138,10 +140,28 @@
     "saved": "Settings saved",
     "saveError": "Error saving settings"
   },
+  "database": {
+    "title": "Database Inspector",
+    "subtitle": "View raw invoice data for debugging",
+    "searchPlaceholder": "Enter invoice number (e.g., INV-2026-0001)",
+    "search": "Search",
+    "invoiceList": "Invoices",
+    "noInvoices": "No invoices found",
+    "selectInvoice": "Select an invoice from the list to view details",
+    "invoiceInfo": "Invoice Information",
+    "hashInfo": "Hash Chain Data",
+    "hashInput": "Hash Input (JSON)",
+    "items": "Invoice Items",
+    "hashValid": "Hash Verification Passed",
+    "hashValidDesc": "Recalculated hash matches stored hash",
+    "hashInvalid": "Hash Verification Failed",
+    "hashInvalidDesc": "Recalculated hash does not match stored hash - data may have been modified"
+  },
   "errors": {
     "generic": "An error occurred",
     "notFound": "Not found",
     "network": "Network error",
-    "validation": "Validation error"
+    "validation": "Validation error",
+    "invalidQR": "Invalid QR code format"
   }
 }

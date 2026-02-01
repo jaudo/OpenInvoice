@@ -15,7 +15,6 @@ import {
   Printer,
   Mail,
   Check,
-  X,
   Loader2,
 } from 'lucide-react';
 
@@ -77,7 +76,7 @@ export default function InvoicePage() {
   // Handle barcode scanner input
   useEffect(() => {
     let buffer = '';
-    let timeout: NodeJS.Timeout;
+    let timeout: ReturnType<typeof setTimeout>;
 
     const handleKeyPress = async (e: KeyboardEvent) => {
       // Ignore if in input field (except for barcode entry)

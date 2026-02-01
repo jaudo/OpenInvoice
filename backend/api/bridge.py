@@ -74,7 +74,7 @@ class API:
     def get_receipts_directory(self) -> dict:
         """Get the directory where PDF receipts are saved."""
         try:
-            return self._response(True, {'path': str(self.pdf_generator.output_dir)})
+            return self._response(True, {'path': self.pdf_generator.output_dir})
         except Exception as e:
             return self._response(False, error=str(e))
 
@@ -97,10 +97,13 @@ class API:
             return self._response(False, error=str(e))
 
     def products_get_by_barcode(self, barcode: str) -> dict:
-        """Get product by barcode (auto-fixes keyboard layout issues)."""
+        """Get product by barcode (fixes keyboard layout issues based on settings)."""
         try:
-            # Auto-fix keyboard layout issues (Spanish keyboard, etc.)
-            fixed_barcode = KeyboardMapper.auto_fix(barcode)
+            # Get configured keyboard layout setting
+            layout = self.settings.scanner_keyboard_layout
+
+            # Fix keyboard layout issues using configured layout
+            fixed_barcode = KeyboardMapper.fix_with_layout(barcode, layout)
 
             # Try with fixed barcode first
             product = self.products.get_by_barcode(fixed_barcode)
@@ -225,7 +228,8 @@ class API:
 
             # Generate invoice number
             invoice_number = self.invoices.get_next_invoice_number()
-            timestamp = datetime.now().isoformat()
+            # Use consistent timestamp format that won't be modified by SQLite
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
             # Calculate hash
             current_hash = HashChain.calculate_hash(
@@ -368,13 +372,23 @@ class API:
     # ============ Validation ============
 
     def qr_validate(self, qr_data: str) -> dict:
-        """Validate a QR code (auto-fixes keyboard layout issues)."""
+        """Validate a QR code (fixes keyboard layout issues based on settings)."""
         try:
-            # Auto-fix keyboard layout issues (Spanish keyboard, etc.)
-            fixed_qr_data = KeyboardMapper.auto_fix(qr_data)
+            # Get configured keyboard layout setting
+            layout = self.settings.scanner_keyboard_layout
+
+            # Fix keyboard layout issues using configured layout
+            fixed_qr_data = KeyboardMapper.fix_with_layout(qr_data, layout)
 
             result = self.qr_validator.validate(fixed_qr_data)
-            return self._response(result.valid, result.to_dict(), result.error_message)
+
+            # Include additional debug info in response
+            response_data = result.to_dict()
+            response_data['original_input'] = qr_data
+            response_data['fixed_input'] = fixed_qr_data
+            response_data['layout_used'] = layout
+
+            return self._response(result.valid, response_data, result.error_message)
         except Exception as e:
             return self._response(False, error=str(e))
 
@@ -569,7 +583,68 @@ class API:
         """Get available keyboard layouts."""
         try:
             layouts = KeyboardMapper.get_available_layouts()
+            # Add 'auto' option at the beginning
+            layouts.insert(0, {
+                'id': 'auto',
+                'name': 'Auto-detect',
+                'description': 'Automatically detect layout issues'
+            })
             return self._response(True, layouts)
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def get_scanner_keyboard_layout(self) -> dict:
+        """Get the current scanner keyboard layout setting."""
+        try:
+            layout = self.settings.scanner_keyboard_layout
+            return self._response(True, {'layout': layout})
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def set_scanner_keyboard_layout(self, layout: str) -> dict:
+        """
+        Set the scanner keyboard layout.
+
+        Args:
+            layout: One of 'auto', 'qwerty_us', 'qwerty_es', 'azerty', 'qwertz'
+        """
+        try:
+            valid_layouts = ['auto', 'qwerty_us', 'qwerty_es', 'azerty', 'qwertz']
+            if layout.lower() not in valid_layouts:
+                return self._response(False, error=f"Invalid layout. Must be one of: {', '.join(valid_layouts)}")
+
+            self.settings.scanner_keyboard_layout = layout.lower()
+            return self._response(True, {'layout': layout.lower()})
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def test_keyboard_conversion(self, text: str, layout: str = None) -> dict:
+        """
+        Test keyboard layout conversion without looking up products.
+
+        Useful for debugging keyboard layout issues.
+
+        Args:
+            text: The text to convert
+            layout: Layout to use (or None to use configured setting)
+
+        Returns:
+            Original and converted text
+        """
+        try:
+            if layout is None:
+                layout = self.settings.scanner_keyboard_layout
+
+            converted = KeyboardMapper.fix_with_layout(text, layout)
+            detected = KeyboardMapper.detect_layout_issue(text)
+
+            return self._response(True, {
+                'original': text,
+                'converted': converted,
+                'layout_used': layout,
+                'auto_detected_layout': detected,
+                'was_changed': text != converted
+            })
         except Exception as e:
             return self._response(False, error=str(e))
 
@@ -811,5 +886,105 @@ class API:
             self.email_service.set_config(EmailConfig.from_dict(smtp_config))
             result = self.email_service.test_connection()
             return self._response(result.success, error=result.error)
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    # ============ Database Debug ============
+
+    def database_list_invoices(self) -> dict:
+        """Get list of all invoices for database view."""
+        try:
+            rows = self.db.fetchall(
+                """SELECT id, invoice_number, total, status, created_at, current_hash
+                   FROM invoices ORDER BY id DESC"""
+            )
+            invoices = [
+                {
+                    'id': row['id'],
+                    'invoice_number': row['invoice_number'],
+                    'total': row['total'],
+                    'status': row['status'],
+                    'created_at': row['created_at'],
+                    'hash_prefix': row['current_hash'][:8] if row['current_hash'] else None,
+                }
+                for row in rows
+            ]
+            return self._response(True, invoices)
+        except Exception as e:
+            return self._response(False, error=str(e))
+
+    def database_get_invoice_debug(self, invoice_number: str) -> dict:
+        """
+        Get detailed invoice data for debugging.
+
+        Includes raw database values and hash recalculation.
+        """
+        import json
+
+        try:
+            invoice = self.invoices.get_by_number(invoice_number)
+            if not invoice:
+                return self._response(False, error=f"Invoice {invoice_number} not found")
+
+            # Get items
+            items = [item.to_dict() for item in invoice.items]
+
+            # Normalize items like HashChain does
+            normalized_items = [
+                {
+                    'product_id': item.get('product_id'),
+                    'quantity': item.get('quantity'),
+                    'unit_price': item.get('unit_price'),
+                    'line_total': item.get('line_total'),
+                }
+                for item in items
+            ]
+
+            # Build hash input data
+            hash_data = {
+                'invoice_number': invoice.invoice_number,
+                'seller_id': invoice.seller_id,
+                'total': round(invoice.total, 2),
+                'items': normalized_items,
+                'timestamp': invoice.created_at,
+                'previous_hash': invoice.previous_hash or HashChain.GENESIS_HASH
+            }
+
+            # Get the exact string that would be hashed
+            hash_input = json.dumps(hash_data, sort_keys=True, separators=(',', ':'))
+
+            # Recalculate hash
+            recalculated_hash = HashChain.calculate_hash(
+                invoice_number=invoice.invoice_number,
+                seller_id=invoice.seller_id,
+                total=invoice.total,
+                items=items,
+                timestamp=invoice.created_at,
+                previous_hash=invoice.previous_hash or HashChain.GENESIS_HASH
+            )
+
+            # Build response
+            data = {
+                'invoice_number': invoice.invoice_number,
+                'seller_id': invoice.seller_id,
+                'store_name': invoice.store_name,
+                'subtotal': invoice.subtotal,
+                'vat_amount': invoice.vat_amount,
+                'total': invoice.total,
+                'payment_method': invoice.payment_method,
+                'customer_email': invoice.customer_email,
+                'previous_hash': invoice.previous_hash,
+                'current_hash': invoice.current_hash,
+                'qr_data': invoice.qr_data,
+                'status': invoice.status,
+                'created_at': invoice.created_at,
+                'items': items,
+                'recalculated_hash': recalculated_hash,
+                'hash_matches': recalculated_hash == invoice.current_hash,
+                'hash_input': hash_input,
+            }
+
+            return self._response(True, data)
+
         except Exception as e:
             return self._response(False, error=str(e))

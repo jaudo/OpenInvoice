@@ -8,7 +8,6 @@ import {
   Search,
   Check,
   X,
-  AlertCircle,
   RotateCcw,
   Loader2,
   CheckCircle2,
@@ -38,17 +37,23 @@ export default function ScanPage() {
 
     try {
       // Check if input looks like a QR data string or invoice number
-      if (inputValue.startsWith('OPENINVOICE|')) {
-        // QR data
+      if (inputValue.startsWith('OPENINVOICE|') || inputValue.includes('|')) {
+        // QR data - validate full QR code with all hash checks
         const response = await api.validation.validateQr(inputValue);
         if (response.success && response.data) {
           setResult(response.data);
           if (response.data.invoice_data) {
             setInvoice(response.data.invoice_data);
           }
+        } else {
+          // Handle validation failure - show what checks failed
+          setResult(response.data || {
+            valid: false,
+            error_message: response.error || t('errors.invalidQR'),
+          });
         }
       } else {
-        // Invoice number
+        // Invoice number only - just lookup, no full validation
         const response = await api.invoices.getByNumber(inputValue);
         if (response.success && response.data) {
           setInvoice(response.data);

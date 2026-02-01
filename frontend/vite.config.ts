@@ -4,6 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  base: './',  // Use relative paths for file:// URLs in pywebview
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

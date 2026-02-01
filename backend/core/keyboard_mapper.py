@@ -22,7 +22,9 @@ class KeyboardMapper:
         'ñ': ';',   # Ñ position = ; on US
         '-': '/',   # - key on Spanish = / on US (next to right shift)
         '_': '?',   # Shift+- on Spanish = ? on US
-        '\'': '-',  # ' on Spanish = - on US
+        '\'': '-',  # ' (apostrophe) on Spanish = - on US
+        '´': '-',   # ´ (acute accent) on Spanish = - on US (Windows variant)
+        '\u2019': '-',  # ' (right single quote U+2019) on Spanish = - on US (Unicode variant)
         '?': '_',   # Shift+' on Spanish = _ on US
         '¡': '=',   # ¡ on Spanish = = on US
         '¿': '+',   # Shift+¡ on Spanish = + on US
@@ -34,11 +36,10 @@ class KeyboardMapper:
         'Ç': '|',   # Shift+ç on Spanish = | on US
         'º': '`',   # º on Spanish = ` on US
         'ª': '~',   # Shift+º on Spanish = ~ on US
-        '·': '\'',  # AltGr+3 sometimes
-        # Numbers with shift
+        # Numbers with shift (Spanish keyboard)
         '!': '!',   # Same
         '"': '@',   # Shift+2 on Spanish = @ on US
-        '·': '#',   # Shift+3 on Spanish = # on US
+        '·': '#',   # Shift+3 on Spanish (middot) = # on US
         '$': '$',   # Same
         '%': '%',   # Same
         '&': '^',   # Shift+6 on Spanish = ^ on US
@@ -264,6 +265,45 @@ class KeyboardMapper:
             return mapper.map_to_qwerty(text)
 
         return text
+
+    @staticmethod
+    def fix_with_layout(text: str, layout: str) -> str:
+        """
+        Fix keyboard layout issues using a specific layout setting.
+
+        Args:
+            text: Input text that may have layout issues
+            layout: The layout to use:
+                - 'auto': Auto-detect and fix
+                - 'qwerty_us': No conversion (scanner and system both US)
+                - 'qwerty_es': Force Spanish to US conversion
+                - 'azerty': Force AZERTY to US conversion
+                - 'qwertz': Force QWERTZ to US conversion
+
+        Returns:
+            Fixed text
+        """
+        if not text:
+            return text
+
+        layout = layout.lower() if layout else 'auto'
+
+        if layout == 'auto':
+            return KeyboardMapper.auto_fix(text)
+        elif layout == 'qwerty_us':
+            # No conversion needed
+            return text
+        elif layout == 'qwerty_es':
+            return KeyboardMapper.fix_spanish_barcode(text)
+        elif layout == 'azerty':
+            mapper = KeyboardMapper(system_layout='azerty')
+            return mapper.map_to_qwerty(text)
+        elif layout == 'qwertz':
+            mapper = KeyboardMapper(system_layout='qwertz')
+            return mapper.map_to_qwerty(text)
+        else:
+            # Unknown layout, try auto-fix
+            return KeyboardMapper.auto_fix(text)
 
     @staticmethod
     def is_likely_barcode(text: str) -> bool:

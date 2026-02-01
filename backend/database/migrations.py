@@ -136,6 +136,7 @@ def insert_default_settings(db: Database = None):
         'smtp_password': '',
         'smtp_use_tls': 'true',
         'keyboard_layout': 'qwerty',
+        'scanner_keyboard_layout': 'auto',  # Options: auto, qwerty_us, qwerty_es, azerty, qwertz
         'currency_symbol': '€',
         'default_vat_rate': '21.0',
     }

@@ -14,13 +14,15 @@
     "back": "Atrás",
     "next": "Siguiente",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "refresh": "Actualizar"
   },
   "nav": {
     "invoice": "Factura",
     "scan": "Escanear",
     "products": "Productos",
     "reports": "Informes",
+    "database": "Base de Datos",
     "config": "Configuración"
   },
   "invoice": {
@@ -138,10 +140,28 @@
     "saved": "Configuración guardada",
     "saveError": "Error al guardar"
   },
+  "database": {
+    "title": "Inspector de Base de Datos",
+    "subtitle": "Ver datos de factura para depuración",
+    "searchPlaceholder": "Número de factura (ej. INV-2026-0001)",
+    "search": "Buscar",
+    "invoiceList": "Facturas",
+    "noInvoices": "No hay facturas",
+    "selectInvoice": "Selecciona una factura de la lista para ver detalles",
+    "invoiceInfo": "Información de Factura",
+    "hashInfo": "Datos de Cadena Hash",
+    "hashInput": "Entrada Hash (JSON)",
+    "items": "Artículos de Factura",
+    "hashValid": "Verificación Hash Correcta",
+    "hashValidDesc": "El hash recalculado coincide con el almacenado",
+    "hashInvalid": "Verificación Hash Fallida",
+    "hashInvalidDesc": "El hash recalculado no coincide - los datos pueden haber sido modificados"
+  },
   "errors": {
     "generic": "Ha ocurrido un error",
     "notFound": "No encontrado",
     "network": "Error de red",
-    "validation": "Error de validación"
+    "validation": "Error de validación",
+    "invalidQR": "Formato de código QR inválido"
   }
 }

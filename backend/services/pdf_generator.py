@@ -28,8 +28,11 @@ class PDFGenerator:
         Args:
             output_dir: Directory for saving PDF files (temp dir if not specified)
         """
-        self.output_dir = output_dir or Path.cwd() / "temp"
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Store as string to avoid pywebview serialization issues with Path objects
+        self._output_dir_path = output_dir or Path.cwd() / "temp"
+        self._output_dir_path.mkdir(parents=True, exist_ok=True)
+        # Public attribute as string for API access
+        self.output_dir = str(self._output_dir_path)
 
     def generate_receipt_pdf(
         self,
@@ -243,12 +246,12 @@ class PDFGenerator:
         pdf_bytes = self.generate_receipt_pdf(invoice_number=invoice_number, **kwargs)
 
         filename = f"receipt_{invoice_number.replace('-', '_')}.pdf"
-        filepath = self.output_dir / filename
+        filepath = self._output_dir_path / filename
 
         with open(filepath, 'wb') as f:
             f.write(pdf_bytes)
 
-        return filepath
+        return str(filepath)
 
     def generate_from_invoice(self, invoice: dict, settings: dict = None) -> bytes:
         """

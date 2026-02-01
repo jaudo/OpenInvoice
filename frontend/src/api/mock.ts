@@ -414,7 +414,7 @@ export const mockApi: PyWebViewAPI = {
 
   async settings_update(key: string, value: unknown): Promise<ApiResponse<void>> {
     await delay(100);
-    (mockSettings as Record<string, unknown>)[key] = value;
+    (mockSettings as unknown as Record<string, unknown>)[key] = value;
     return { success: true };
   },
 
@@ -537,5 +537,38 @@ export const mockApi: PyWebViewAPI = {
       return { success: false, error: 'SMTP not configured' };
     }
     return { success: true };
+  },
+
+  // Database debug
+  async database_list_invoices(): Promise<ApiResponse<unknown>> {
+    await delay(100);
+    return {
+      success: true,
+      data: sampleInvoices.map((inv) => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        total: inv.total,
+        status: inv.status,
+        created_at: inv.created_at,
+        hash_prefix: inv.current_hash.slice(0, 8),
+      })),
+    };
+  },
+
+  async database_get_invoice_debug(invoiceNumber: string): Promise<ApiResponse<unknown>> {
+    await delay(200);
+    const invoice = sampleInvoices.find((i) => i.invoice_number === invoiceNumber);
+    if (!invoice) {
+      return { success: false, error: 'Invoice not found' };
+    }
+    return {
+      success: true,
+      data: {
+        ...invoice,
+        recalculated_hash: invoice.current_hash,
+        hash_matches: true,
+        hash_input: JSON.stringify({ invoice_number: invoice.invoice_number }),
+      },
+    };
   },
 };

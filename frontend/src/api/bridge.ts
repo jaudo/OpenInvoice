@@ -136,6 +136,14 @@ export const api = {
   email: {
     testConnection: (): Promise<ApiResponse<void>> => getApi().email_test_connection(),
   },
+
+  // Database debugging
+  database: {
+    listInvoices: (): Promise<ApiResponse<unknown>> =>
+      getApi().database_list_invoices(),
+    getInvoiceDebug: (invoiceNumber: string): Promise<ApiResponse<unknown>> =>
+      getApi().database_get_invoice_debug(invoiceNumber),
+  },
 };
 
 // Export helper to check environment

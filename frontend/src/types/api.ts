@@ -208,4 +208,8 @@ export interface PyWebViewAPI {
 
   // Email
   email_test_connection(): Promise<ApiResponse<void>>;
+
+  // Database debug
+  database_list_invoices(): Promise<ApiResponse<unknown>>;
+  database_get_invoice_debug(invoice_number: string): Promise<ApiResponse<unknown>>;
 }

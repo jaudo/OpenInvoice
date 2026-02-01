@@ -162,3 +162,21 @@ class SettingsRepository:
             self.set('smtp_password', config['password'])
         if 'use_tls' in config:
             self.set('smtp_use_tls', config['use_tls'])
+
+    @property
+    def scanner_keyboard_layout(self) -> str:
+        """
+        Get the configured keyboard layout for barcode scanner.
+
+        Values: 'auto', 'qwerty_us', 'qwerty_es', 'azerty', 'qwertz'
+        - 'auto': Auto-detect layout issues (default)
+        - 'qwerty_us': Scanner and system both US layout (no conversion)
+        - 'qwerty_es': System uses Spanish layout, scanner sends US scancodes
+        - 'azerty': System uses French AZERTY layout
+        - 'qwertz': System uses German QWERTZ layout
+        """
+        return self.get('scanner_keyboard_layout') or 'auto'
+
+    @scanner_keyboard_layout.setter
+    def scanner_keyboard_layout(self, value: str):
+        self.set('scanner_keyboard_layout', value)

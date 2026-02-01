@@ -9,6 +9,7 @@ import ScanPage from '@/pages/ScanPage';
 import ProductsPage from '@/pages/ProductsPage';
 import ReportsPage from '@/pages/ReportsPage';
 import ConfigPage from '@/pages/ConfigPage';
+import DatabasePage from '@/pages/DatabasePage';
 
 // Icons
 import {
@@ -17,10 +18,11 @@ import {
   Package,
   BarChart3,
   Settings,
+  Database,
   ChevronDown,
 } from 'lucide-react';
 
-type TabId = 'invoice' | 'scan' | 'products' | 'reports' | 'config';
+type TabId = 'invoice' | 'scan' | 'products' | 'reports' | 'database' | 'config';
 
 interface Tab {
   id: TabId;
@@ -33,6 +35,7 @@ const tabs: Tab[] = [
   { id: 'scan', labelKey: 'nav.scan', icon: <QrCode className="w-5 h-5" /> },
   { id: 'products', labelKey: 'nav.products', icon: <Package className="w-5 h-5" /> },
   { id: 'reports', labelKey: 'nav.reports', icon: <BarChart3 className="w-5 h-5" /> },
+  { id: 'database', labelKey: 'nav.database', icon: <Database className="w-5 h-5" /> },
   { id: 'config', labelKey: 'nav.config', icon: <Settings className="w-5 h-5" /> },
 ];
 
@@ -72,6 +75,8 @@ function App() {
         return <ProductsPage />;
       case 'reports':
         return <ReportsPage />;
+      case 'database':
+        return <DatabasePage />;
       case 'config':
         return <ConfigPage />;
       default:
